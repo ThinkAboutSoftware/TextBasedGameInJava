@@ -1,6 +1,6 @@
 package com.rpg.game.thread;
 
-public class Loading extends Thread {
+public class LoadingThread extends Thread {
     @Override
     public void run() {
         System.out.println();

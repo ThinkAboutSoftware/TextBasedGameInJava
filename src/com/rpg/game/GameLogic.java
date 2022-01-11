@@ -1,6 +1,9 @@
 package com.rpg.game;
 
-import com.rpg.game.thread.Loading;
+import com.rpg.game.thread.*;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicLong;
@@ -8,29 +11,53 @@ import java.util.concurrent.atomic.AtomicLong;
 public class GameLogic {
 
     public static void main(String[] args) {
+        final long timeInterval = 30000;
+        //final long timeInterval = 300;
         GameLogic game = new GameLogic();
 
         game.intro();
         game.createCharacter();
         game.selectJob();
+        List<Thread> Threads = new ArrayList<>();
+        DayAndNightThread e = new DayAndNightThread(timeInterval, hero);
+        e.setDaemon(true);
+        Threads.add(e);
+        Threads.add(new limitedGameTimeThread(timeInterval));
+
+        for (Thread th : Threads) {
+            th.start();
+        }
+
+        // TODO: 2022/01/11 상호작용, 공유변수
+
+        TurnOnSound turnOnSound = new TurnOnSound(true, soundThread);
+        Thread thread = new Thread(() -> {
+            turnOnSound.On(true);
+        });
+
+        thread.start();
         game.selectMenu();
     }
 
+
+
     Random random = new Random();
     Scanner sc = new Scanner(System.in);
-    Character hero = new Character();
     private final AtomicLong index = new AtomicLong(1);
+    static SoundThread soundThread = new SoundThread(true);
+    static Character hero = new Character();
     private boolean isRunning = true;
     private boolean fightBoss = false;
+    private boolean playing = true;
 
     public long getIndex() {
         return index.get();
     }
 
     private void intro() {
-        System.out.println("기차 마지막 칸 조정실에 있는 VIP를 구하라!");
+        System.out.println("기차 마지막 칸 조정실에 있는 VIP를 구출하라!");
         System.out.println("첫 번째 칸에서 스무 번째 칸까지 슬라임과 싸워 이기고, 각 칸의 보스 슬라임을 죽여야 다음 칸으로 이동할 수 있다.");
-        System.out.println("보스 슬라임을 20번 죽이면 VIP를 무사히 구하고, 최종 승리한다.");
+        System.out.println("보스 슬라임을 20번 죽이면 VIP를 무사히 구출하고, 최종 승리한다.");
         System.out.println("======================================================");
     }
 
@@ -71,13 +98,14 @@ public class GameLogic {
     }
 
     private void selectMenu() {
+
         while (isRunning) {
             long index = this.index.get();
             System.out.println("현재 기차의 " + index + "번째 칸입니다");
             if (index == 20) {
-                System.out.println("1. 슬라임이랑 싸우기 / 2. 현재 상태 확인 / 3. 상점 / 4. 최종 마지막 슬라임 보스랑 싸우기");
+                System.out.println("1. 슬라임이랑 싸우기 / 2. 현재 상태 확인 / 3. 상점 / 4. 최종 마지막 슬라임 보스랑 싸우기 / 5. 배경음악 토글");
             } else {
-                System.out.println("1. 슬라임이랑 싸우기 / 2. 현재 상태 확인 / 3. 상점 / " + "4. " + index + "번째 칸 슬라임 보스랑 싸우기");
+                System.out.println("1. 슬라임이랑 싸우기 / 2. 현재 상태 확인 / 3. 상점 / " + "4. " + index + "번째 칸 슬라임 보스랑 싸우기 / 5. 배경음악 토글");
             }
             isNumber();
             int input = sc.nextInt();
@@ -96,17 +124,50 @@ public class GameLogic {
                     fightBoss = true;
                     fight();
                     break;
+                case 5:
+                    toggleSound();
+                    break;
                 default:
-                    System.err.println("1~4번까지의 숫자를 다시 입력해주세요.");
+                    System.err.println("1~5번까지의 숫자를 다시 입력해주세요.");
                     selectMenu();
                     break;
             }
         }
     }
 
+    private void toggleSound() {
+        if (playing) {
+            TurnOffSound turnOffSound = new TurnOffSound(false, soundThread);
+            Thread thread = new Thread(() -> {
+                turnOffSound.Off(false);
+            });
+            thread.start();
+            playing = false;
+        } else {
+            TurnOnSound turnOnSound = new TurnOnSound(true, soundThread);
+            Thread thread = new Thread(() -> {
+                turnOnSound.On(true);
+            });
+            thread.start();
+            playing = true;
+        }
+
+
+    }
+
+
     private void store() {
         makeLoading();
         Store store = new Store();
+
+        long l = this.index.get();
+        PotionMakerThread potionMaker = new PotionMakerThread(store, l);
+        Thread thread = new Thread(() -> {
+            potionMaker.makePotion((int) index.get());
+        });
+
+        thread.start();
+
         System.out.println("기차 안 상점입니다. 무엇을 구입하시겠습니까?");
         store.showMenu();
         isNumber();
@@ -128,7 +189,6 @@ public class GameLogic {
         slimes[1] = new BlueSlime();
         slimes[2] = new BlackSlime();
 
-
         if (fightBoss) {
             slime = new BossSlime();
             System.out.println(slime.getClass().getSimpleName() + "과 싸웁니다.");
@@ -137,6 +197,7 @@ public class GameLogic {
             slime = slimes[randomSlime];
             System.out.println(slime.getClass().getSimpleName() + "과 싸웁니다.");
         }
+
 
         while (isRunning) {
             int whoFirst = random.nextInt(2);
@@ -157,10 +218,9 @@ public class GameLogic {
             }
 
             if (!(hero.isDead() || slime.isDead())) {
-                keepFight();
+               keepFight();
             }
         }
-
     }
 
     private void attackToHero(Slime slime) {
@@ -206,13 +266,17 @@ public class GameLogic {
             System.out.println("======================================================");
             int money = slime.dropTheMoney();
             int exp = slime.dropTheExp();
-            hero.getMoney(money);
-            hero.getExp(exp);
+            hero.setMoney(money);
+            hero.setExp(exp);
             hero.checkLevelUp();
 
-            System.out.println("경험치: +" + hero.exp);
-            System.out.println("돈: +" + hero.money);
-            System.out.println("레벨: " + hero.level);
+            helpNPCThread helpNPC = new helpNPCThread(hero);
+            helpNPC.start();
+            try {
+                helpNPC.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
 
             if (fightBoss) win();
 
@@ -220,21 +284,24 @@ public class GameLogic {
         }
     }
 
-    private void keepFight() {
+    private boolean keepFight() {
+        boolean result = true;
         System.out.println("1.계속 싸운다 / 2.도망간다.");
         isNumber();
         int i = sc.nextInt();
         if (i == 2) {
+            result = false;
             makeLoading();
             selectMenu();
         } else if (i != 1) {
             System.err.println("1번 혹은 2번만 선택 가능합니다.");
             keepFight();
         }
+        return result;
     }
 
     private void makeLoading() {
-        Loading loading = new Loading();
+        LoadingThread loading = new LoadingThread();
         loading.start();
         try {
             loading.join();
@@ -273,14 +340,14 @@ public class GameLogic {
         System.out.println("VIP 를 무사히 구출했습니다.");
         System.out.println("========================= WIN ========================");
         System.out.println("======================================================");
-        isRunning = false;
+        System.exit(0);
     }
 
     private void lose() {
         System.out.println("======================================================");
-        System.out.println("GAME OVER");
+        System.err.println("GAME OVER");
         System.out.println("======================================================");
-        isRunning = false;
+        System.exit(0);
     }
 
     private void isNumber() {
@@ -289,4 +356,7 @@ public class GameLogic {
             System.err.println("숫자만 입력해주세요.");
         }
     }
+
+
+
 }

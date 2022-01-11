@@ -45,7 +45,7 @@ public class Slime {
 
     public int dropTheExp() {
         long index = game.getIndex();
-        return random.nextInt((int) (index * 10));
+        return random.nextInt((int) (index * 100));
     }
 
 }

@@ -37,4 +37,8 @@ public class Item {
         this.stock--;
     }
 
+    public void setStock(int index) {
+        this.stock += index;
+    }
+
 }
